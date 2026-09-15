@@ -23,19 +23,24 @@ import provenance_client as pc
 logger = logging.getLogger("refresh_volumes")
 
 
-def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS) -> int:
+def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS,
+                            limit: int = 500) -> int:
     """
-    Checks NAV for every loan discovered in the last `window_days` days
-    that doesn't yet have a dollar amount. Updates any that have funded.
+    Checks NAV for loans discovered in the last `window_days` days that
+    don't yet have a dollar amount, up to `limit` per run (api.provenance.io
+    has a real, undocumented rate limit -- see provenance_client.py -- so
+    an unbounded backlog here can turn one run into an hours-long one；
+    capping it just means the remainder gets picked up on the next run,
+    since this only ever touches loans still missing amount_usd).
     Returns the number of loans newly priced this run.
     """
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=window_days)).isoformat()
     updated = 0
 
     with db.connect() as conn:
-        pending = db.get_unfunded_recent_scopes(conn, since)
-        logger.info("Checking NAV for %d unfunded loans (window=%dd)",
-                    len(pending), window_days)
+        pending = db.get_unfunded_recent_scopes(conn, since, limit=limit)
+        logger.info("Checking NAV for %d unfunded loans (window=%dd, limit=%d)",
+                    len(pending), window_days, limit)
 
         now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
         for row in pending:

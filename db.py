@@ -162,14 +162,15 @@ def scope_exists(conn, scope_addr: str) -> bool:
     return row is not None
 
 
-def get_unfunded_recent_scopes(conn, since_iso: str):
+def get_unfunded_recent_scopes(conn, since_iso: str, limit: int = 500):
     """Loans discovered since `since_iso` that don't have a dollar amount yet."""
     return conn.execute(
         """
         SELECT scope_addr FROM loans
         WHERE amount_usd IS NULL AND block_time >= ?
+        LIMIT ?
         """,
-        (since_iso,),
+        (since_iso, limit),
     ).fetchall()
 
 
