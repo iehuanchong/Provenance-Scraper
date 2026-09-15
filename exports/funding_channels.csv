@@ -1,0 +1,2 @@
+snapshot_date,as_of_time,supply,account_count,structures_count,total_securitization,total_participation,total_warehoused,total_pools,total_unstructured,scraped_at,securitized_usd,whole_loan_usd,securitized_share
+2026-09-15,1789390839,22558008629268.0,5728,79179,9831246205302.0,525071739739.0,7850878687520.0,3675233744217.0,514907686560.0,2026-09-15T03:15:01.279027+00:00,9831246205302.0,12566091858036.0,0.4389470827961774
