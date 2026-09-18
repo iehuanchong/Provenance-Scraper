@@ -37,7 +37,7 @@ from scrape_originations import discover_originations
 from refresh_volumes import refresh_recent_volumes
 from refresh_rates import refresh_pending_rates
 from snapshot_funding_channels import snapshot_funding_channels, compute_securitization_split
-from enrich_loan_classes import enrich_pending
+from enrich_loan_classes import enrich_pending, reclassify_existing
 import compute_originator_metrics as metrics
 
 logging.basicConfig(
@@ -179,6 +179,7 @@ def main():
     if not args.no_enrich:
         logger.info("=== Enrichment ===")
         enrich_pending(limit=args.enrich_limit)
+        reclassify_existing()
 
     logger.info("=== Rate refresh ===")
     refresh_pending_rates(limit=args.rate_limit)

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Figure Origination Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --navy: #003579;
+    --navy-light: #2C5A9E;
+    --paper: #F7F7F5;
+    --panel: #FFFFFF;
+    --ink: #171B21;
+    --ink-muted: #565D68;
+    --hairline: #D9DCE2;
+    --gold: #A9814A;
+    --decline: #8C3B3B;
+    --font-header: Georgia, 'Times New Roman', serif;
+    --font-body: Arial, Helvetica, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--navy); }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    background: var(--navy);
+    color: #fff;
+    padding: 28px 0 22px;
+  }
+  .masthead .wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .masthead h1 {
+    font-family: var(--font-header);
+    font-weight: normal;
+    font-size: 30px;
+    margin: 0;
+    letter-spacing: 0.2px;
+  }
+  .masthead p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #C9D6E8;
+    max-width: 520px;
+    line-height: 1.5;
+  }
+  .masthead .updated {
+    font-size: 12px;
+    color: #C9D6E8;
+    text-align: right;
+  }
+  .masthead .updated strong {
+    display: block;
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  /* ---------- Ticker sparkline ---------- */
+  .ticker {
+    background: #041E4A;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+  .ticker .wrap {
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .ticker .label {
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+  .ticker canvas { height: 40px !important; flex: 1; }
+
+  /* ---------- Sections ---------- */
+  section {
+    border-bottom: 1px solid var(--hairline);
+    padding: 36px 0;
+  }
+  section:last-of-type { border-bottom: none; }
+
+  h2 {
+    font-family: var(--font-header);
+    font-weight: normal;
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  .section-note {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin: 0 0 20px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+
+  /* ---------- Hero stats ---------- */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--hairline);
+    border-left: 1px solid var(--hairline);
+  }
+  .stat {
+    border-right: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    padding: 18px 20px;
+  }
+  .stat .value {
+    font-family: var(--font-header);
+    font-size: 26px;
+    color: var(--navy);
+  }
+  .stat .value.gold { color: var(--gold); }
+  .stat .label {
+    font-size: 11.5px;
+    color: var(--ink-muted);
+    margin-top: 4px;
+  }
+  @media (max-width: 760px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---------- Two-column layout ---------- */
+  .cols-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+  @media (max-width: 800px) {
+    .cols-2 { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    padding: 9px 10px;
+    text-align: right;
+    border-bottom: 1px solid var(--hairline);
+    font-variant-numeric: tabular-nums;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    font-weight: normal;
+    color: var(--ink-muted);
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--ink);
+  }
+  td.addr { font-family: 'Courier New', monospace; font-size: 12px; color: var(--ink-muted); }
+  tr:hover td { background: #FBFAF7; }
+
+  /* ---------- Rate range bars ---------- */
+  .rate-row { display: grid; grid-template-columns: 140px 1fr 90px; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 13px; }
+  .rate-track { position: relative; height: 6px; background: #EBEAE6; border-radius: 0; }
+  .rate-fill { position: absolute; top: 0; bottom: 0; background: var(--navy-light); }
+  .rate-median { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--gold); }
+  .rate-values { text-align: right; color: var(--ink-muted); font-size: 12px; }
+
+  /* ---------- Chart containers ---------- */
+  .chart-box { position: relative; height: 320px; }
+  .chart-box.short { height: 220px; }
+
+  .empty-state {
+    font-size: 13px;
+    color: var(--ink-muted);
+    font-style: italic;
+    padding: 20px 0;
+  }
+
+  footer {
+    padding: 30px 0 50px;
+    font-size: 11.5px;
+    color: var(--ink-muted);
+    line-height: 1.7;
+  }
+  footer a { color: var(--ink-muted); }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="wrap">
+    <div>
+      <h1>Figure Origination Monitor</h1>
+      <p>Loan-level origination, funding, and rate data sourced directly from the Provenance Blockchain — updated daily.</p>
+    </div>
+    <div class="updated">
+      <strong id="lastUpdated">Loading&hellip;</strong>
+      data through most recent origination date
+    </div>
+  </div>
+</div>
+
+<div class="ticker">
+  <div class="wrap">
+    <span class="label">Daily Volume</span>
+    <canvas id="tickerChart"></canvas>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section id="heroSection">
+    <div class="stats-row" id="statsRow">
+      <div class="stat"><div class="value">&mdash;</div><div class="label">Cumulative Volume</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label">Volume, Last 7 Days</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label">Median Rate, Last 7 Days</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label">Active Originators, Last 7 Days</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Originations by Product</h2>
+    <p class="section-note">Daily notional volume over the trailing 30 days, stacked by product classification. "Unclassified" reflects loans not yet processed by the enrichment step, which runs on a limited daily budget and clears gradually — see the note at the foot of this page.</p>
+    <div class="chart-box"><canvas id="originationsChart"></canvas></div>
+  </section>
+
+  <section>
+    <div class="cols-2">
+      <div>
+        <h2>Origination &rarr; Funding</h2>
+        <p class="section-note">Share of originated loans, by product, that have posted a funded amount on-chain (trailing 30 days).</p>
+        <table id="fundingTable">
+          <thead><tr><th>Product</th><th>Originated</th><th>Funded</th><th>% Funded</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Rate Distribution</h2>
+        <p class="section-note">Minimum, median, and maximum interest rate by product (all available data).</p>
+        <div id="rateDistribution"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Originator Concentration</h2>
+    <p class="section-note">Top-5 originator share of monthly volume, and a Herfindahl-Hirschman concentration index (0&ndash;1, higher is more concentrated).</p>
+    <div class="chart-box"><canvas id="concentrationChart"></canvas></div>
+  </section>
+
+  <section>
+    <div class="cols-2">
+      <div>
+        <h2>Partner Growth</h2>
+        <p class="section-note">New originators recording their first on-chain funded loan, by month.</p>
+        <div class="chart-box short"><canvas id="partnersChart"></canvas></div>
+      </div>
+      <div>
+        <h2>Partner Ramp Curves</h2>
+        <p class="section-note">Cumulative funded volume for the ten largest originators, by months since each one's first loan.</p>
+        <div class="chart-box short"><canvas id="rampChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Originators, Trailing 30 Days</h2>
+    <p class="section-note">Ranked by notional volume. Addresses are shown as recorded on-chain; identity is not independently verified.</p>
+    <table id="originatorsTable">
+      <thead><tr><th>Originator</th><th>Loans</th><th>Notional</th><th>Med. Rate</th><th>Share</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Funding Structure</h2>
+    <p class="section-note">Securitized vs. whole-loan share of the FIGR_HELOC funding pool, daily. This split is inferred from five raw funding-channel categories Figure reports on-chain; the underlying category definitions are not officially published — see the repository README for the exact mapping used.</p>
+    <div class="chart-box"><canvas id="fundingChart"></canvas></div>
+  </section>
+
+  <footer>
+    <p>Data sourced from public Provenance Blockchain APIs (service-explorer.provenance.io, api.provenance.io) and reconstructed independently — this is not an official Figure Technologies or Provenance Blockchain Foundation product, and figures here have not been verified against any internal source. Product classification (HELOC/Property-Secured vs. Consumer/Unsecured) is inferred from on-chain contract naming and volume proportions, not a confirmed mapping; see the scraper's README for methodology and confidence notes.</p>
+    <p>Source and methodology: <a href="https://github.com/iehuanchong/Provenance-Scraper" target="_blank" rel="noopener">github.com/iehuanchong/Provenance-Scraper</a></p>
+  </footer>
+
+</div>
+
+<script>
+const REPO = "iehuanchong/Provenance-Scraper";
+const BRANCH = "main";
+const DATA_BASE = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/exports/`;
+
+const NAVY = "#003579";
+const NAVY_LIGHT = "#2C5A9E";
+const GOLD = "#A9814A";
+const DECLINE = "#8C3B3B";
+const GREY = "#B7BCC4";
+const CLASS_COLORS = {
+  "HELOC/Property-Secured": NAVY,
+  "Consumer/Unsecured": NAVY_LIGHT,
+  "Auto": GOLD,
+  "Bridge": "#6E86A8",
+  "Other": "#8B8478",
+  "Unknown": GREY,
+};
+
+Chart.defaults.font.family = "Arial, Helvetica, sans-serif";
+Chart.defaults.color = "#565D68";
+Chart.defaults.font.size = 11;
+
+function classColor(name) { return CLASS_COLORS[name] || GREY; }
+
+function fmtUsd(n, compact = true) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  if (compact) {
+    if (Math.abs(n) >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+    if (Math.abs(n) >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
+    if (Math.abs(n) >= 1e3) return "$" + (n / 1e3).toFixed(0) + "K";
+  }
+  return "$" + Math.round(n).toLocaleString();
+}
+function fmtPct(n, digits = 1) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return (n * 100).toFixed(digits) + "%";
+}
+function fmtRate(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return n.toFixed(2) + "%";
+}
+function shortAddr(a) {
+  if (!a) return "—";
+  return a.slice(0, 10) + "…" + a.slice(-4);
+}
+function median(arr) {
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+function daysAgo(dateStr, refDate) {
+  return (refDate - new Date(dateStr)) / 86400000;
+}
+
+async function fetchCsv(name) {
+  try {
+    const res = await fetch(DATA_BASE + name, { cache: "no-store" });
+    if (!res.ok) return [];
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
+    return parsed.data;
+  } catch (e) {
+    console.warn("Failed to load", name, e);
+    return [];
+  }
+}
+
+function emptyState(el, msg) {
+  el.innerHTML = `<div class="empty-state">${msg}</div>`;
+}
+
+async function main() {
+  const [loans, funding, concentration, newPartners, ramp] = await Promise.all([
+    fetchCsv("loans.csv"),
+    fetchCsv("funding_channels.csv"),
+    fetchCsv("concentration_monthly.csv"),
+    fetchCsv("new_partners_monthly.csv"),
+    fetchCsv("originator_ramp_curves.csv"),
+  ]);
+
+  const validLoans = loans.filter(l => l && l.scope_addr && l.block_time);
+
+  if (!validLoans.length) {
+    document.getElementById("lastUpdated").textContent = "No data yet";
+    emptyState(document.getElementById("heroSection"),
+      "No origination data has been scraped yet. Once the daily job runs, this page will populate automatically.");
+    return;
+  }
+
+  validLoans.forEach(l => {
+    // NOTE: PapaParse's dynamicTyping auto-converts full ISO datetime
+    // strings (like block_time) into native Date objects, but leaves
+    // plain YYYY-MM-DD / YYYY-MM strings (used elsewhere) as strings.
+    // Always derive from `new Date(...)`, which accepts either a string
+    // or an existing Date, rather than assuming block_time is a string.
+    l._date = new Date(l.block_time);
+    l._day = l._date.toISOString().slice(0, 10);
+  });
+  const maxDate = new Date(Math.max(...validLoans.map(l => l._date)));
+  document.getElementById("lastUpdated").textContent =
+    maxDate.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+  renderTicker(validLoans, maxDate);
+  renderHeroStats(validLoans, maxDate);
+  renderOriginationsChart(validLoans, maxDate);
+  renderFundingTable(validLoans, maxDate);
+  renderRateDistribution(validLoans);
+  renderConcentration(concentration);
+  renderPartnerGrowth(newPartners);
+  renderRampCurves(ramp);
+  renderOriginatorsTable(validLoans, maxDate);
+  renderFundingStructure(funding);
+}
+
+function renderTicker(loans, maxDate) {
+  const byDay = {};
+  loans.forEach(l => {
+    if (l.amount_usd) byDay[l._day] = (byDay[l._day] || 0) + l.amount_usd;
+  });
+  const days = Object.keys(byDay).sort();
+  new Chart(document.getElementById("tickerChart"), {
+    type: "line",
+    data: { labels: days, datasets: [{ data: days.map(d => byDay[d]), borderColor: GOLD, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.15 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtUsd(c.parsed.y) } } },
+      scales: { x: { display: false }, y: { display: false } },
+    },
+  });
+}
+
+function renderHeroStats(loans, maxDate) {
+  const cumulative = loans.reduce((s, l) => s + (l.amount_usd || 0), 0);
+  const last7 = loans.filter(l => daysAgo(l._day, maxDate) <= 7);
+  const vol7 = last7.reduce((s, l) => s + (l.amount_usd || 0), 0);
+  const rates7 = last7.filter(l => l.interest_rate_pct).map(l => l.interest_rate_pct);
+  const activeOriginators7 = new Set(last7.map(l => l.originator_address)).size;
+
+  const stats = document.querySelectorAll("#statsRow .stat");
+  const values = [fmtUsd(cumulative), fmtUsd(vol7), fmtRate(median(rates7)), activeOriginators7.toLocaleString()];
+  const goldIndex = 3;
+  stats.forEach((el, i) => {
+    el.querySelector(".value").textContent = values[i];
+    if (i === goldIndex) el.querySelector(".value").classList.add("gold");
+  });
+}
+
+function renderOriginationsChart(loans, maxDate) {
+  const cutoff = new Date(maxDate.getTime() - 30 * 86400000);
+  const recent = loans.filter(l => l._date >= cutoff);
+  if (!recent.length) {
+    emptyState(document.getElementById("originationsChart").parentElement, "Not enough data yet for a 30-day view.");
+    return;
+  }
+  const days = [...new Set(recent.map(l => l._day))].sort();
+  const classes = [...new Set(recent.map(l => l.loan_class || "Unclassified"))];
+
+  const datasets = classes.map(cls => ({
+    label: cls,
+    data: days.map(d => recent.filter(l => (l.loan_class || "Unclassified") === cls && l._day === d)
+      .reduce((s, l) => s + (l.amount_usd || 0), 0)),
+    backgroundColor: classColor(cls),
+    stack: "vol",
+  }));
+
+  new Chart(document.getElementById("originationsChart"), {
+    type: "bar",
+    data: { labels: days, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y)}` } } },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, ticks: { callback: v => fmtUsd(v) }, grid: { color: "#EBEAE6" } },
+      },
+    },
+  });
+}
+
+function renderFundingTable(loans, maxDate) {
+  const cutoff = new Date(maxDate.getTime() - 30 * 86400000);
+  const recent = loans.filter(l => l._date >= cutoff);
+  const classes = [...new Set(recent.map(l => l.loan_class || "Unclassified"))];
+  const tbody = document.querySelector("#fundingTable tbody");
+  tbody.innerHTML = "";
+  classes.forEach(cls => {
+    const rows = recent.filter(l => (l.loan_class || "Unclassified") === cls);
+    const funded = rows.filter(l => l.amount_usd).length;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${cls}</td><td>${rows.length.toLocaleString()}</td><td>${funded.toLocaleString()}</td><td>${fmtPct(funded / rows.length)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderRateDistribution(loans) {
+  const el = document.getElementById("rateDistribution");
+  const classes = [...new Set(loans.map(l => l.loan_class || "Unclassified"))];
+  const allRates = loans.filter(l => l.interest_rate_pct).map(l => l.interest_rate_pct);
+  if (!allRates.length) { emptyState(el, "No rate data available yet."); return; }
+  const globalMin = Math.min(...allRates), globalMax = Math.max(...allRates);
+  el.innerHTML = "";
+  classes.forEach(cls => {
+    const rates = loans.filter(l => (l.loan_class || "Unclassified") === cls && l.interest_rate_pct).map(l => l.interest_rate_pct);
+    if (!rates.length) return;
+    const min = Math.min(...rates), max = Math.max(...rates), med = median(rates);
+    const range = globalMax - globalMin || 1;
+    const leftPct = ((min - globalMin) / range) * 100;
+    const widthPct = ((max - min) / range) * 100;
+    const medPct = ((med - globalMin) / range) * 100;
+    const row = document.createElement("div");
+    row.className = "rate-row";
+    row.innerHTML = `
+      <div>${cls}</div>
+      <div class="rate-track">
+        <div class="rate-fill" style="left:${leftPct}%; width:${widthPct}%; background:${classColor(cls)};"></div>
+        <div class="rate-median" style="left:${medPct}%;"></div>
+      </div>
+      <div class="rate-values">${med.toFixed(2)}%</div>`;
+    el.appendChild(row);
+  });
+}
+
+function renderConcentration(rows) {
+  const el = document.getElementById("concentrationChart");
+  if (!rows.length) { emptyState(el.parentElement, "Concentration data accumulates as more months of history are collected."); return; }
+  new Chart(el, {
+    type: "line",
+    data: {
+      labels: rows.map(r => r.month),
+      datasets: [
+        { label: "Top-5 Share", data: rows.map(r => r.top5_share), borderColor: NAVY, backgroundColor: NAVY, yAxisID: "y", tension: 0.15, pointRadius: 3 },
+        { label: "Concentration Index (HHI)", data: rows.map(r => r.concentration_index_hhi), borderColor: GOLD, backgroundColor: GOLD, yAxisID: "y", tension: 0.15, pointRadius: 3, borderDash: [4, 3] },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtPct(c.parsed.y)}` } } },
+      scales: { y: { min: 0, max: 1, ticks: { callback: v => fmtPct(v, 0) }, grid: { color: "#EBEAE6" } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderPartnerGrowth(rows) {
+  const el = document.getElementById("partnersChart");
+  if (!rows.length) { emptyState(el.parentElement, "Not enough history yet to show monthly onboarding."); return; }
+  new Chart(el, {
+    type: "bar",
+    data: { labels: rows.map(r => r.month), datasets: [{ data: rows.map(r => r.new_partner_count), backgroundColor: NAVY_LIGHT }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#EBEAE6" } } },
+    },
+  });
+}
+
+function renderRampCurves(rows) {
+  const el = document.getElementById("rampChart");
+  if (!rows.length) { emptyState(el.parentElement, "Ramp curves require originators with a full funding history — check back as more data accumulates."); return; }
+  const originators = [...new Set(rows.map(r => r.originator_address))];
+  const months = [...new Set(rows.map(r => r.months_since_first_loan))].sort((a, b) => a - b);
+  const palette = [NAVY, NAVY_LIGHT, GOLD, "#6E86A8", "#8B8478", "#A65D57", "#4C7A6E", "#8A6FA3", "#B08D57", "#3D5A80"];
+
+  const datasets = originators.map((addr, i) => {
+    const byMonth = {};
+    rows.filter(r => r.originator_address === addr).forEach(r => { byMonth[r.months_since_first_loan] = r.cumulative_funded_volume_usd; });
+    return {
+      label: shortAddr(addr),
+      data: months.map(m => byMonth[m] ?? null),
+      borderColor: palette[i % palette.length],
+      backgroundColor: palette[i % palette.length],
+      pointRadius: 0,
+      tension: 0.15,
+      spanGaps: true,
+    };
+  });
+
+  new Chart(el, {
+    type: "line",
+    data: { labels: months, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y)}` } } },
+      scales: {
+        x: { title: { display: true, text: "Months since first loan", font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { callback: v => fmtUsd(v) }, grid: { color: "#EBEAE6" } },
+      },
+    },
+  });
+}
+
+function renderOriginatorsTable(loans, maxDate) {
+  const cutoff = new Date(maxDate.getTime() - 30 * 86400000);
+  const recent = loans.filter(l => l._date >= cutoff);
+  const byOrig = {};
+  recent.forEach(l => {
+    const o = byOrig[l.originator_address] || (byOrig[l.originator_address] = { count: 0, volume: 0, rates: [] });
+    o.count += 1;
+    if (l.amount_usd) o.volume += l.amount_usd;
+    if (l.interest_rate_pct) o.rates.push(l.interest_rate_pct);
+  });
+  const totalVolume = Object.values(byOrig).reduce((s, o) => s + o.volume, 0);
+  const ranked = Object.entries(byOrig).sort((a, b) => b[1].volume - a[1].volume).slice(0, 25);
+
+  const tbody = document.querySelector("#originatorsTable tbody");
+  tbody.innerHTML = "";
+  if (!ranked.length) { emptyState(tbody.parentElement, "No originator activity in the trailing 30 days yet."); return; }
+  ranked.forEach(([addr, o]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="addr">${shortAddr(addr)}</td>
+      <td>${o.count.toLocaleString()}</td>
+      <td>${fmtUsd(o.volume)}</td>
+      <td>${fmtRate(median(o.rates))}</td>
+      <td>${fmtPct(totalVolume ? o.volume / totalVolume : null)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderFundingStructure(rows) {
+  const el = document.getElementById("fundingChart");
+  const valid = rows.filter(r => r.snapshot_date);
+  if (!valid.length) { emptyState(el.parentElement, "Funding-structure snapshots accumulate one per day."); return; }
+  valid.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+  new Chart(el, {
+    type: "bar",
+    data: {
+      labels: valid.map(r => r.snapshot_date),
+      datasets: [
+        { label: "Securitized", data: valid.map(r => r.securitized_usd), backgroundColor: NAVY, stack: "f" },
+        { label: "Whole Loan / Other", data: valid.map(r => r.whole_loan_usd), backgroundColor: GOLD, stack: "f" },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y, false)}` } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: v => fmtUsd(v) }, grid: { color: "#EBEAE6" } } },
+    },
+  });
+}
+
+main();
+</script>
+
+</body>
+</html>

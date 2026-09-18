@@ -92,6 +92,7 @@ engineered by hand against the live chain, not from any official docs.
 | `enrich_loan_classes.py` | Optional: best-effort HELOC/Consumer/Auto classification |
 | `compute_originator_metrics.py` | Derived analytics: mix, ramp curves, new-partner counts, concentration |
 | `run_daily.py` | Orchestrator — run this one |
+| `docs/index.html` | Live dashboard site (GitHub Pages) — see "Dashboard site" below |
 | `test_parsing.py`, `test_db_and_snapshot.py` | Offline tests using real captured chain data |
 
 ## Running locally
@@ -125,6 +126,49 @@ Output:
 Run the tests any time with `python test_parsing.py` and
 `python test_db_and_snapshot.py` — no network access needed, they replay
 real chain data captured during development.
+
+## Dashboard site
+
+`docs/index.html` is a self-contained dashboard (no build step — plain
+HTML/CSS/JS, Chart.js + PapaParse loaded from CDN) that fetches the
+CSV exports directly from your repo's raw GitHub URLs and renders them
+client-side. It updates automatically every time the daily workflow
+commits new CSVs — no rebuild or redeploy needed, since it fetches
+fresh data on every page load.
+
+**One-time setup to publish it via GitHub Pages:**
+
+1. In your repo, go to **Settings → Pages**.
+2. Under "Build and deployment", set **Source** to "Deploy from a
+   branch", **Branch** to `main`, folder to `/docs`. Save.
+3. GitHub will give you a URL like
+   `https://<your-username>.github.io/<your-repo>/` — it can take a
+   minute or two to go live the first time.
+4. **Important:** open `docs/index.html` and check the `REPO` constant
+   near the top of the `<script>` block — it must exactly match your
+   `username/repo-name`. If you forked/renamed this project, update
+   that line before publishing.
+
+The page pulls data straight from
+`https://raw.githubusercontent.com/<REPO>/main/exports/*.csv`, which is
+confirmed to send permissive CORS headers (`access-control-allow-origin: *`),
+so the cross-origin fetch from your `github.io` domain works without
+any server-side proxy.
+
+**Design notes:** styled after Keefe, Bruyette & Woods' brand navy
+(`#003579`, taken directly from their site's theme-color) — as an
+institutional research-monitor layout (hairline-divided sections, dense
+right-aligned tables) rather than a consumer dashboard, since that's
+closer to how a real IB research terminal actually looks. The header
+typeface (Georgia) is a professional judgment call, not a verified
+match to KBW's actual webfont, since their CSS wasn't accessible to
+extract it from. Body/data text uses Arial as requested.
+
+Every chart/table degrades gracefully to a plain-language empty-state
+message rather than erroring when a given CSV doesn't have data yet
+(e.g. `concentration_monthly.csv` needs a few months of history before
+it's meaningful) — verified with a headless-DOM test harness against
+both real scraped data and a fully-empty first-run scenario.
 
 ## Running it daily on GitHub (no server needed)
 
@@ -173,21 +217,47 @@ back into the repo automatically.
    tab. If a run pushes an updated `data/originations.db`, you'll see a
    new commit on `main` from `github-actions[bot]`.
 
-### A note on scale
+### A note on scale — and a real rate limit we hit
 
 Figure originates roughly 800-900 loans/day platform-wide per their own
 published stats. The discovery job makes one API call per transaction
 (not per loan — most transactions bundle 1 loan, occasionally 2+), so
-that's a few hundred to ~1,000 calls/day. Rate refresh and volume
-refresh each add roughly one call per loan on top of that (rate
-resolves immediately so it's a one-time cost per loan; volume can take
-several retries across days until a loan funds). All told, a few
-thousand calls/day at steady state — still well within GitHub Actions'
-free-tier minute allowance, and gentle on Provenance's public
-infrastructure at the default `REQUEST_DELAY_SECONDS` pacing in
-`config.py`.
+that's a few hundred to ~1,000 calls/day, all against
+`service-explorer.provenance.io`.
 
-If you want to be extra conservative (no documented rate limit was
-found for either API), raise `REQUEST_DELAY_SECONDS` — the tradeoff is
-just a longer-running workflow, which GitHub Actions handles fine up to
-6 hours per job.
+**`api.provenance.io` (used for enrichment, rate refresh, and volume
+refresh) turned out to have a real, undocumented rate limit that's much
+stricter than `service-explorer.provenance.io`'s.** In an actual first
+run, 1,204 sequential calls to service-explorer at 0.25s pacing produced
+zero 429s — but the moment enrichment and rate-refresh started hitting
+api.provenance.io back-to-back for hundreds of loans, nearly every
+single request came back `429`.
+
+Two things in the code now handle this:
+
+1. **`provenance_client.py` paces api.provenance.io and
+   service-explorer.provenance.io separately** (`config.CHAIN_API_REQUEST_DELAY_SECONDS`
+   vs `config.SERVICE_EXPLORER_REQUEST_DELAY_SECONDS`), and adapts —
+   a 429 permanently raises that host's delay for every *subsequent*
+   request (not just retries of the same resource, which was the actual
+   bug in the first version: backing off on one loan while immediately
+   hammering the next, different loan at full speed). It also honors a
+   `Retry-After` header exactly when the server sends one, and eases the
+   delay back down after a long clean streak. See
+   `test_rate_limiting.py` for this behavior verified against a mocked
+   session.
+
+2. **`run_daily.py` caps how many loans get enriched/rate-checked/
+   volume-checked per run** (`--enrich-limit`, `--rate-limit`,
+   `--volume-limit`, all default 150) rather than trying to clear an
+   entire backlog in one go. This is safe because all three are
+   idempotent "whatever's still pending" queries — anything left over
+   just gets picked up on the next day's run. A large first-time
+   backlog (like an initial 1,200-loan day) will take a few runs to
+   fully enrich/rate/price, not one.
+
+If you're backfilling a lot of history at once and want it to go
+faster, you can raise these limits, but expect api.provenance.io to
+throttle you if you push too hard — the adaptive delay will handle it
+correctly now, just possibly slowly. GitHub Actions jobs can run up to
+6 hours, so there's headroom either way.
