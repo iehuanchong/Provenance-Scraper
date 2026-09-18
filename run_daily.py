@@ -29,6 +29,7 @@ import argparse
 import csv
 import logging
 import statistics
+import sys
 import datetime as dt
 
 import config
@@ -173,26 +174,39 @@ def main():
         yesterday = dt.date.today() - dt.timedelta(days=1)
         from_date = to_date = yesterday.isoformat()
 
-    logger.info("=== Discovery: %s to %s ===", from_date, to_date)
-    discover_originations(from_date, to_date)
+    # Each phase runs independently: a bug or a stretch of bad luck in
+    # one (an unhandled exception, not just the per-item retries each
+    # phase already does internally) shouldn't prevent the others from
+    # running or prevent export_csv_summaries() from committing whatever
+    # progress was made. Individual API-call failures within a phase are
+    # already handled by provenance_client's retries and by the
+    # per-item try/except in scrape_originations/enrich_loan_classes/
+    # refresh_rates/refresh_volumes -- this is a second, coarser safety
+    # net for anything those don't catch.
+    failures = []
+
+    def run_phase(name, fn):
+        logger.info("=== %s ===", name)
+        try:
+            fn()
+        except Exception:
+            logger.exception("Phase '%s' failed -- continuing with the rest of the run", name)
+            failures.append(name)
+
+    run_phase("Discovery", lambda: discover_originations(from_date, to_date))
 
     if not args.no_enrich:
-        logger.info("=== Enrichment ===")
-        enrich_pending(limit=args.enrich_limit)
-        reclassify_existing()
+        run_phase("Enrichment", lambda: enrich_pending(limit=args.enrich_limit))
+        run_phase("Reclassification", reclassify_existing)
 
-    logger.info("=== Rate refresh ===")
-    refresh_pending_rates(limit=args.rate_limit)
+    run_phase("Rate refresh", lambda: refresh_pending_rates(limit=args.rate_limit))
+    run_phase("Volume refresh", lambda: refresh_recent_volumes(limit=args.volume_limit))
+    run_phase("Funding-channel snapshot", snapshot_funding_channels)
+    run_phase("CSV export", export_csv_summaries)
 
-    logger.info("=== Volume refresh ===")
-    refresh_recent_volumes(limit=args.volume_limit)
-
-    logger.info("=== Funding-channel snapshot ===")
-    snapshot_funding_channels()
-
-    logger.info("=== CSV export ===")
-    export_csv_summaries()
-
+    if failures:
+        logger.error("Daily run finished with failures in: %s", ", ".join(failures))
+        sys.exit(1)
     logger.info("Daily run complete.")
 
 

@@ -53,6 +53,14 @@ jobs:
         run: python run_daily.py
 
       - name: Commit updated data + exports
+        # Always attempt this, even if the scrape step above reported a
+        # failure -- run_daily.py runs each phase (discovery, enrichment,
+        # rate/volume refresh, export) independently and commits progress
+        # to SQLite incrementally, so a failure in one phase (e.g. a
+        # transient timeout) still leaves real, worth-keeping progress
+        # from the others. The job as a whole still shows as failed above
+        # if run_daily.py exited non-zero, so failures stay visible.
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

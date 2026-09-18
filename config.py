@@ -29,7 +29,7 @@ LOAN_ORIGINATION_SCOPE_SPEC = "scopespec1q32dmk9ux5q50zvx7x7kvkh37c7svqc3pg"
 FIGR_HELOC_ROLLUP_SCOPE = "scope1qrm5d0wjzamyywvjuws6774ljmrqu8kh9x"
 
 # --- HTTP behaviour ----------------------------------------------------
-REQUEST_TIMEOUT_SECONDS = 20
+REQUEST_TIMEOUT_SECONDS = 30
 MAX_RETRIES = 5
 RETRY_BACKOFF_BASE_SECONDS = 1.5
 MAX_BACKOFF_SECONDS = 30          # cap a single retry's wait; rely on the

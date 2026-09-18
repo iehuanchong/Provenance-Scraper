@@ -99,7 +99,17 @@ def discover_originations(from_date: str, to_date: str) -> int:
                 # De-dup happens per-scope via ON CONFLICT DO NOTHING in
                 # db.upsert_loan, so it's safe to re-scan overlapping
                 # date windows (e.g. when catching up after a missed run).
-                tx_detail = pc.get_tx_detail(tx_hash)
+                try:
+                    tx_detail = pc.get_tx_detail(tx_hash)
+                except RuntimeError:
+                    # A transient failure on ONE transaction (timeout,
+                    # 5xx, etc.) should not sink the entire day's
+                    # discovery run. Skip it and move on -- it'll simply
+                    # get picked up again if this date range is ever
+                    # re-scraped (safe, since upsert_loan is idempotent).
+                    logger.warning("Failed to fetch tx detail for %s after retries, skipping", tx_hash)
+                    continue
+
                 loans = parse_loans_from_tx(tx_detail)
                 if not loans:
                     continue
@@ -122,11 +132,20 @@ def discover_originations(from_date: str, to_date: str) -> int:
                     )
                     inserted += 1
 
+            # Commit after every page rather than waiting for the whole
+            # multi-page discovery run to finish. If something fails
+            # later (a different host, a later page, an unrelated bug),
+            # everything committed so far survives -- previously the
+            # entire day's progress lived in one uncommitted transaction
+            # and a single late failure discarded ALL of it.
+            conn.commit()
+
             if page >= total_pages:
                 break
             page += 1
 
         db.set_state(conn, "last_discovered_to_date", to_date)
+        conn.commit()
 
     logger.info("Discovery complete: %d loan rows inserted for %s..%s",
                 inserted, from_date, to_date)

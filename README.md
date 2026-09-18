@@ -93,7 +93,7 @@ engineered by hand against the live chain, not from any official docs.
 | `compute_originator_metrics.py` | Derived analytics: mix, ramp curves, new-partner counts, concentration |
 | `run_daily.py` | Orchestrator — run this one |
 | `docs/index.html` | Live dashboard site (GitHub Pages) — see "Dashboard site" below |
-| `test_parsing.py`, `test_db_and_snapshot.py` | Offline tests using real captured chain data |
+| `test_parsing.py`, `test_db_and_snapshot.py`, `test_rate_limiting.py`, `test_discovery_resilience.py` | Offline tests using real captured chain data |
 
 ## Running locally
 
@@ -261,3 +261,39 @@ faster, you can raise these limits, but expect api.provenance.io to
 throttle you if you push too hard — the adaptive delay will handle it
 correctly now, just possibly slowly. GitHub Actions jobs can run up to
 6 hours, so there's headroom either way.
+
+### A real crash we hit, and how the code is now resilient to it
+
+In production, a single transaction (out of ~1,200 that day) hit a
+read timeout against `service-explorer.provenance.io`, exhausted all 5
+retries, and raised. Two compounding problems, both fixed now:
+
+1. **The whole run crashed.** `scrape_originations.py`'s per-transaction
+   loop had no try/except around the network call — unlike
+   `enrich_loan_classes.py` / `refresh_rates.py` / `refresh_volumes.py`,
+   which already skip-and-continue on a single item's failure. Fixed:
+   discovery now does the same — a transaction that fails after retries
+   is logged and skipped, not fatal. Since `upsert_loan` is idempotent,
+   nothing is lost by skipping; it'll just get picked up again if that
+   date range is ever re-scraped.
+
+2. **Worse: all progress from that entire day would have been
+   discarded, not just the one bad transaction.** The whole multi-page
+   discovery loop ran inside a single SQLite transaction that only
+   committed at the very end — so a crash on transaction #400 (out of,
+   say, 1,200) meant transactions #1-399's work was rolled back too when
+   the connection closed without committing. Fixed: `scrape_originations.py`
+   now commits after every page of results, so a later failure can't
+   erase earlier, already-good progress. `run_daily.py` also now runs
+   each phase (discovery, enrichment, rate refresh, volume refresh,
+   funding snapshot, CSV export) independently — a failure in one
+   doesn't prevent the others from running, and the GitHub Actions
+   workflow's commit step runs even if `run_daily.py` reports a failure,
+   so partial progress still gets saved rather than the whole day's work
+   vanishing. The job still shows as failed in the Actions tab when this
+   happens, so it stays visible rather than silently swallowed.
+
+See `test_discovery_resilience.py` for this verified directly: it
+simulates a transaction that fails after retries, sandwiched between
+two that succeed, and confirms both surrounding transactions still land
+in the database.
