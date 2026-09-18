@@ -170,6 +170,30 @@ message rather than erroring when a given CSV doesn't have data yet
 it's meaningful) — verified with a headless-DOM test harness against
 both real scraped data and a fully-empty first-run scenario.
 
+**Period selector.** A tab bar under the ticker (1 Day / Trailing 1 Week
+/ Trailing 1 Month / MTD / QTD / Custom) drives every period-aware
+section on the page: hero stats, the origination volume chart, the
+funding table, rate distribution, originator concentration, and the
+funding-structure chart. Bucketing follows the period: daily bars for
+everything except QTD, which buckets weekly (using ISO week labels like
+"2026-W37" — the same convention Figure's own investor page uses, so
+they line up if you're cross-checking) since a whole quarter of daily
+bars gets too dense to read. Two sections are deliberately **not**
+period-aware — Partner Growth and Ramp Curves, both tagged "All-Time"
+in their headers — since monthly onboarding trends and multi-month
+ramp curves aren't meaningful sliced down to a single day.
+
+**Originator Concentration** now lists every originator active in the
+selected period (not capped at a top-N), in a scrollable table, with
+Top-5 Share and a Herfindahl-Hirschman index computed live from the
+period-filtered data above it.
+
+All of this — including switching between all 6 periods and the custom
+date range — is exercised in a headless-DOM test harness
+(`/tmp/dashtest` during development; not checked into the repo) against
+real scraped data before shipping, to catch runtime bugs like the
+PapaParse date-object issue mentioned above before they'd show up live.
+
 ## Running it daily on GitHub (no server needed)
 
 This repo already includes `.github/workflows/daily_scrape.yml`, which
@@ -249,18 +273,49 @@ Two things in the code now handle this:
 
 2. **`run_daily.py` caps how many loans get enriched/rate-checked/
    volume-checked per run** (`--enrich-limit`, `--rate-limit`,
-   `--volume-limit`, all default 150) rather than trying to clear an
-   entire backlog in one go. This is safe because all three are
-   idempotent "whatever's still pending" queries — anything left over
-   just gets picked up on the next day's run. A large first-time
-   backlog (like an initial 1,200-loan day) will take a few runs to
-   fully enrich/rate/price, not one.
+   `--volume-limit`, default 1,500 each — see the note below on why
+   this was raised from an initial, too-conservative 150). This is safe
+   because all three are idempotent "whatever's still pending" queries
+   — anything left over just gets picked up on the next day's run.
 
 If you're backfilling a lot of history at once and want it to go
-faster, you can raise these limits, but expect api.provenance.io to
-throttle you if you push too hard — the adaptive delay will handle it
-correctly now, just possibly slowly. GitHub Actions jobs can run up to
-6 hours, so there's headroom either way.
+faster, you can raise these limits further, but expect api.provenance.io
+to throttle you if you push too hard — the adaptive delay will handle
+it correctly now, just possibly slowly. GitHub Actions jobs can run up
+to 6 hours, so there's headroom either way.
+
+### Why dollar volume looked artificially low at first — and the fix
+
+Early on, `--enrich-limit`/`--rate-limit`/`--volume-limit` all defaulted
+to 150 as an intentionally conservative first guess, before we'd
+confirmed what pacing api.provenance.io could actually sustain. That
+turned out to be a real problem once discovery started reliably finding
+~1,200 new loans/day: processing only 150/day for enrichment, rate, and
+volume meant the "pending" backlog grew by roughly 1,050/day,
+indefinitely — most loans simply never got priced. On the dashboard,
+this showed up as "Volume, Last 7 Days" reading suspiciously close to
+"All-Time Volume": with so few loans priced at all, and all the priced
+ones sitting in that same short window (since scraping had only been
+running a few days), the two figures had nowhere meaningfully different
+to draw from.
+
+Cross-checking against Figure's own investor metrics page
+(figure.com/investors/metrics) confirmed the scale we should expect —
+their published week of Sep 7-13, 2026 shows ~$345M — and confirmed
+something structural, not just a bug: **Figure's own numbers are
+curated/audited internally on a weekly cadence, not purely live
+on-chain.** Our on-chain approach will always lag real-time for the
+most recent few days specifically because NAV only posts once a loan
+funds (a multi-day process) — the dashboard's "preliminary period"
+notice reflects this directly, the same way Figure's own page marks its
+current period as preliminary.
+
+The fix: raised all three limits to 1,500 (comfortably above the daily
+discovery rate, so the backlog actually shrinks instead of growing) —
+now safe to do since the adaptive rate limiter in `provenance_client.py`
+handles real-world pacing correctly rather than us guessing at a fixed
+number. Expect dollar figures to become meaningfully more complete over
+the next several days of runs as the backlog clears.
 
 ### A real crash we hit, and how the code is now resilient to it
 

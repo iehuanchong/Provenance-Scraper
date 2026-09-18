@@ -153,16 +153,16 @@ def main():
         help="Skip the per-loan contract-class enrichment step (faster, cheaper)",
     )
     parser.add_argument(
-        "--enrich-limit", type=int, default=150,
-        help="Max number of loans to enrich per run (default: 150 -- conservative given api.provenance.io's real rate limit, see provenance_client.py)",
+        "--enrich-limit", type=int, default=1500,
+        help="Max number of loans to enrich per run (default: 1500 -- comfortably above the ~1,200/day new-loan rate, so the backlog actually shrinks rather than growing indefinitely; the adaptive rate limiter in provenance_client.py handles pacing safely)",
     )
     parser.add_argument(
-        "--rate-limit", type=int, default=150,
-        help="Max number of loans to check ledger/rate data for per run (default: 150)",
+        "--rate-limit", type=int, default=1500,
+        help="Max number of loans to check ledger/rate data for per run (default: 1500)",
     )
     parser.add_argument(
-        "--volume-limit", type=int, default=150,
-        help="Max number of loans to check NAV/volume for per run (default: 150)",
+        "--volume-limit", type=int, default=1500,
+        help="Max number of loans to check NAV/volume for per run (default: 1500)",
     )
     args = parser.parse_args()
 

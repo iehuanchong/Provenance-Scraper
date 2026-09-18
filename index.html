@@ -97,6 +97,58 @@
   }
   .ticker canvas { height: 40px !important; flex: 1; }
 
+  /* ---------- Period selector ---------- */
+  .period-bar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--hairline);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .period-bar .wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 24px;
+    flex-wrap: wrap;
+  }
+  .period-btn {
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    padding: 7px 14px;
+    background: none;
+    border: 1px solid var(--hairline);
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .period-btn:hover { border-color: var(--navy-light); color: var(--navy); }
+  .period-btn.active {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+  .period-range-label {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .custom-dates {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+  .custom-dates.visible { display: flex; }
+  .custom-dates input[type=date] {
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    border: 1px solid var(--hairline);
+    padding: 5px 6px;
+    color: var(--ink);
+  }
+
   /* ---------- Sections ---------- */
   section {
     border-bottom: 1px solid var(--hairline);
@@ -116,6 +168,15 @@
     margin: 0 0 20px;
     max-width: 640px;
     line-height: 1.5;
+  }
+  .all-time-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    color: var(--navy);
+    border: 1px solid var(--navy-light);
+    padding: 2px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
   }
 
   /* ---------- Hero stats ---------- */
@@ -173,9 +234,34 @@
     color: var(--ink-muted);
     font-size: 11.5px;
     border-bottom: 1px solid var(--ink);
+    position: sticky;
+    top: 0;
+    background: var(--panel);
   }
   td.addr { font-family: 'Courier New', monospace; font-size: 12px; color: var(--ink-muted); }
   tr:hover td { background: #FBFAF7; }
+
+  .scroll-box {
+    max-height: 480px;
+    overflow-y: auto;
+    border: 1px solid var(--hairline);
+  }
+  .scroll-box table { font-size: 12.5px; }
+
+  /* ---------- Concentration summary numbers ---------- */
+  .conc-numbers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--hairline);
+    margin-bottom: 20px;
+  }
+  .conc-numbers .box {
+    background: var(--panel);
+    padding: 16px 20px;
+  }
+  .conc-numbers .value { font-family: var(--font-header); font-size: 24px; color: var(--navy); }
+  .conc-numbers .label { font-size: 11.5px; color: var(--ink-muted); margin-top: 4px; }
 
   /* ---------- Rate range bars ---------- */
   .rate-row { display: grid; grid-template-columns: 140px 1fr 90px; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 13px; }
@@ -185,7 +271,7 @@
   .rate-values { text-align: right; color: var(--ink-muted); font-size: 12px; }
 
   /* ---------- Chart containers ---------- */
-  .chart-box { position: relative; height: 320px; }
+  .chart-box { position: relative; height: 340px; }
   .chart-box.short { height: 220px; }
 
   .empty-state {
@@ -193,6 +279,16 @@
     color: var(--ink-muted);
     font-style: italic;
     padding: 20px 0;
+  }
+
+  .notice {
+    font-size: 11.5px;
+    color: var(--ink-muted);
+    border-left: 2px solid var(--gold);
+    padding: 8px 12px;
+    margin: 14px 0 0;
+    line-height: 1.6;
+    background: #FBF8F2;
   }
 
   footer {
@@ -221,8 +317,25 @@
 
 <div class="ticker">
   <div class="wrap">
-    <span class="label">Daily Volume</span>
+    <span class="label">All-Time Daily Volume</span>
     <canvas id="tickerChart"></canvas>
+  </div>
+</div>
+
+<div class="period-bar">
+  <div class="wrap">
+    <button class="period-btn" data-period="1d">1 Day</button>
+    <button class="period-btn" data-period="7d">Trailing 1 Week</button>
+    <button class="period-btn" data-period="1m">Trailing 1 Month</button>
+    <button class="period-btn" data-period="mtd">MTD</button>
+    <button class="period-btn" data-period="qtd">QTD</button>
+    <button class="period-btn" data-period="custom">Custom</button>
+    <div class="custom-dates" id="customDates">
+      <input type="date" id="customStart"> &ndash;
+      <input type="date" id="customEnd">
+      <button class="period-btn" id="applyCustom" style="border-color:var(--navy);color:var(--navy);">Apply</button>
+    </div>
+    <span class="period-range-label" id="periodRangeLabel"></span>
   </div>
 </div>
 
@@ -230,16 +343,17 @@
 
   <section id="heroSection">
     <div class="stats-row" id="statsRow">
-      <div class="stat"><div class="value">&mdash;</div><div class="label">Cumulative Volume</div></div>
-      <div class="stat"><div class="value">&mdash;</div><div class="label">Volume, Last 7 Days</div></div>
-      <div class="stat"><div class="value">&mdash;</div><div class="label">Median Rate, Last 7 Days</div></div>
-      <div class="stat"><div class="value">&mdash;</div><div class="label">Active Originators, Last 7 Days</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label">All-Time Volume</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label" id="volLabel">Volume, Selected Period</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label" id="rateLabel">Median Rate, Selected Period</div></div>
+      <div class="stat"><div class="value">&mdash;</div><div class="label" id="origLabel">Active Originators, Selected Period</div></div>
     </div>
+    <div class="notice">On-chain loan amounts (NAV) post once a loan funds, which lags origination by several days depending on product. Figures for the most recent days in the selected period are likely to rise as those loans finish funding — treat the current, partial period the way Figure's own investor page treats its "preliminary" current-period data.</div>
   </section>
 
   <section>
-    <h2>Originations by Product</h2>
-    <p class="section-note">Daily notional volume over the trailing 30 days, stacked by product classification. "Unclassified" reflects loans not yet processed by the enrichment step, which runs on a limited daily budget and clears gradually — see the note at the foot of this page.</p>
+    <h2>Origination Volume</h2>
+    <p class="section-note" id="volumeChartNote">Notional volume by product, bucketed to match the selected period.</p>
     <div class="chart-box"><canvas id="originationsChart"></canvas></div>
   </section>
 
@@ -247,7 +361,7 @@
     <div class="cols-2">
       <div>
         <h2>Origination &rarr; Funding</h2>
-        <p class="section-note">Share of originated loans, by product, that have posted a funded amount on-chain (trailing 30 days).</p>
+        <p class="section-note">Share of originated loans, by product, that have posted a funded amount on-chain, for the selected period.</p>
         <table id="fundingTable">
           <thead><tr><th>Product</th><th>Originated</th><th>Funded</th><th>% Funded</th></tr></thead>
           <tbody></tbody>
@@ -255,7 +369,7 @@
       </div>
       <div>
         <h2>Rate Distribution</h2>
-        <p class="section-note">Minimum, median, and maximum interest rate by product (all available data).</p>
+        <p class="section-note">Minimum, median, and maximum interest rate by product, for the selected period.</p>
         <div id="rateDistribution"></div>
       </div>
     </div>
@@ -263,19 +377,28 @@
 
   <section>
     <h2>Originator Concentration</h2>
-    <p class="section-note">Top-5 originator share of monthly volume, and a Herfindahl-Hirschman concentration index (0&ndash;1, higher is more concentrated).</p>
-    <div class="chart-box"><canvas id="concentrationChart"></canvas></div>
+    <p class="section-note">Every originator active in the selected period, ranked by notional volume.</p>
+    <div class="conc-numbers">
+      <div class="box"><div class="value" id="top5ShareValue">&mdash;</div><div class="label">Top-5 Share of Volume</div></div>
+      <div class="box"><div class="value" id="hhiValue">&mdash;</div><div class="label">Concentration Index (HHI)</div></div>
+    </div>
+    <div class="scroll-box">
+      <table id="originatorsTable">
+        <thead><tr><th>Originator</th><th>Loans</th><th>Notional</th><th>Med. Rate</th><th>Share</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <section>
     <div class="cols-2">
       <div>
-        <h2>Partner Growth</h2>
-        <p class="section-note">New originators recording their first on-chain funded loan, by month.</p>
+        <h2>Partner Growth <span class="all-time-tag">All-Time</span></h2>
+        <p class="section-note">New originators recording their first on-chain funded loan, by month. Shown across all history collected, not the period selector above — monthly onboarding trends aren't meaningful sliced to a single day or week.</p>
         <div class="chart-box short"><canvas id="partnersChart"></canvas></div>
       </div>
       <div>
-        <h2>Partner Ramp Curves</h2>
+        <h2>Partner Ramp Curves <span class="all-time-tag">All-Time</span></h2>
         <p class="section-note">Cumulative funded volume for the ten largest originators, by months since each one's first loan.</p>
         <div class="chart-box short"><canvas id="rampChart"></canvas></div>
       </div>
@@ -283,17 +406,8 @@
   </section>
 
   <section>
-    <h2>Originators, Trailing 30 Days</h2>
-    <p class="section-note">Ranked by notional volume. Addresses are shown as recorded on-chain; identity is not independently verified.</p>
-    <table id="originatorsTable">
-      <thead><tr><th>Originator</th><th>Loans</th><th>Notional</th><th>Med. Rate</th><th>Share</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <section>
     <h2>Funding Structure</h2>
-    <p class="section-note">Securitized vs. whole-loan share of the FIGR_HELOC funding pool, daily. This split is inferred from five raw funding-channel categories Figure reports on-chain; the underlying category definitions are not officially published — see the repository README for the exact mapping used.</p>
+    <p class="section-note">Securitized vs. whole-loan share of the FIGR_HELOC funding pool, bucketed to match the selected period. This split is inferred from five raw funding-channel categories Figure reports on-chain; the underlying category definitions are not officially published — see the repository README for the exact mapping used.</p>
     <div class="chart-box"><canvas id="fundingChart"></canvas></div>
   </section>
 
@@ -312,7 +426,6 @@ const DATA_BASE = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/exports/`
 const NAVY = "#003579";
 const NAVY_LIGHT = "#2C5A9E";
 const GOLD = "#A9814A";
-const DECLINE = "#8C3B3B";
 const GREY = "#B7BCC4";
 const CLASS_COLORS = {
   "HELOC/Property-Secured": NAVY,
@@ -321,6 +434,7 @@ const CLASS_COLORS = {
   "Bridge": "#6E86A8",
   "Other": "#8B8478",
   "Unknown": GREY,
+  "Unclassified": GREY,
 };
 
 Chart.defaults.font.family = "Arial, Helvetica, sans-serif";
@@ -356,8 +470,24 @@ function median(arr) {
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
-function daysAgo(dateStr, refDate) {
-  return (refDate - new Date(dateStr)) / 86400000;
+function toDay(d) { return d.toISOString().slice(0, 10); }
+
+// ISO 8601 week label, e.g. "2026-W37" -- matches the convention Figure's
+// own investor metrics page uses, so our labels line up with theirs if
+// you're cross-checking.
+function isoWeekLabel(date) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+function startOfIsoWeek(date) {
+  const d = new Date(date);
+  const dayNum = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNum);
+  return d;
 }
 
 async function fetchCsv(name) {
@@ -377,21 +507,105 @@ function emptyState(el, msg) {
   el.innerHTML = `<div class="empty-state">${msg}</div>`;
 }
 
+// ---------------------------------------------------------------------
+// Global state
+// ---------------------------------------------------------------------
+const state = {
+  allLoans: [],
+  fundingRows: [],
+  maxDate: null,
+  period: "7d",
+  customStart: null,
+  customEnd: null,
+};
+const charts = {}; // canvas id -> Chart instance, so we can .destroy() before re-rendering
+
+function getPeriodRange() {
+  const max = state.maxDate;
+  let start, end = max, bucket = "daily";
+  switch (state.period) {
+    case "1d":
+      start = max;
+      break;
+    case "7d":
+      start = new Date(max); start.setUTCDate(start.getUTCDate() - 6);
+      break;
+    case "1m":
+      start = new Date(max); start.setUTCDate(start.getUTCDate() - 29);
+      break;
+    case "mtd":
+      start = new Date(Date.UTC(max.getUTCFullYear(), max.getUTCMonth(), 1));
+      break;
+    case "qtd": {
+      const qMonth = Math.floor(max.getUTCMonth() / 3) * 3;
+      start = new Date(Date.UTC(max.getUTCFullYear(), qMonth, 1));
+      bucket = "weekly";
+      break;
+    }
+    case "custom":
+      start = state.customStart || max;
+      end = state.customEnd || max;
+      bucket = "daily";
+      break;
+  }
+  return { start, end, bucket };
+}
+
+function periodLabel(range) {
+  const fmt = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return `${fmt(range.start)} \u2013 ${fmt(range.end)}`;
+}
+
+function filterByRange(items, dateField, range) {
+  const startMs = range.start.getTime(), endMs = range.end.getTime() + 86399999; // inclusive of end day
+  return items.filter(item => {
+    const t = item[dateField].getTime();
+    return t >= startMs && t <= endMs;
+  });
+}
+
+function buildBucketLabels(range) {
+  const labels = [];
+  if (range.bucket === "weekly") {
+    let cur = startOfIsoWeek(range.start);
+    const last = startOfIsoWeek(range.end);
+    while (cur <= last) {
+      labels.push(isoWeekLabel(cur));
+      cur = new Date(cur); cur.setUTCDate(cur.getUTCDate() + 7);
+    }
+  } else {
+    let cur = new Date(range.start);
+    while (cur <= range.end) {
+      labels.push(toDay(cur));
+      cur = new Date(cur); cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+  }
+  return labels;
+}
+
+function bucketKeyFor(date, bucket) {
+  return bucket === "weekly" ? isoWeekLabel(date) : toDay(date);
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ---------------------------------------------------------------------
+// Load + init
+// ---------------------------------------------------------------------
 async function main() {
-  const [loans, funding, concentration, newPartners, ramp] = await Promise.all([
+  const [loans, funding] = await Promise.all([
     fetchCsv("loans.csv"),
     fetchCsv("funding_channels.csv"),
-    fetchCsv("concentration_monthly.csv"),
-    fetchCsv("new_partners_monthly.csv"),
-    fetchCsv("originator_ramp_curves.csv"),
   ]);
 
   const validLoans = loans.filter(l => l && l.scope_addr && l.block_time);
-
   if (!validLoans.length) {
     document.getElementById("lastUpdated").textContent = "No data yet";
     emptyState(document.getElementById("heroSection"),
       "No origination data has been scraped yet. Once the daily job runs, this page will populate automatically.");
+    document.querySelector(".period-bar").style.display = "none";
     return;
   }
 
@@ -399,34 +613,88 @@ async function main() {
     // NOTE: PapaParse's dynamicTyping auto-converts full ISO datetime
     // strings (like block_time) into native Date objects, but leaves
     // plain YYYY-MM-DD / YYYY-MM strings (used elsewhere) as strings.
-    // Always derive from `new Date(...)`, which accepts either a string
-    // or an existing Date, rather than assuming block_time is a string.
     l._date = new Date(l.block_time);
-    l._day = l._date.toISOString().slice(0, 10);
   });
-  const maxDate = new Date(Math.max(...validLoans.map(l => l._date)));
-  document.getElementById("lastUpdated").textContent =
-    maxDate.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  state.allLoans = validLoans;
+  state.fundingRows = funding.filter(r => r.snapshot_date).map(r => ({ ...r, _date: new Date(r.snapshot_date + "T00:00:00Z") }));
+  state.maxDate = new Date(Math.max(...validLoans.map(l => l._date)));
 
-  renderTicker(validLoans, maxDate);
-  renderHeroStats(validLoans, maxDate);
-  renderOriginationsChart(validLoans, maxDate);
-  renderFundingTable(validLoans, maxDate);
-  renderRateDistribution(validLoans);
-  renderConcentration(concentration);
-  renderPartnerGrowth(newPartners);
-  renderRampCurves(ramp);
-  renderOriginatorsTable(validLoans, maxDate);
-  renderFundingStructure(funding);
+  document.getElementById("lastUpdated").textContent =
+    state.maxDate.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+  // Default custom-date inputs to something sensible before the user touches them
+  const startInput = document.getElementById("customStart");
+  const endInput = document.getElementById("customEnd");
+  endInput.value = toDay(state.maxDate);
+  const defaultStart = new Date(state.maxDate); defaultStart.setUTCDate(defaultStart.getUTCDate() - 13);
+  startInput.value = toDay(defaultStart);
+
+  renderTicker();
+  renderAllTimeStat();
+  renderPartnerGrowthAndRamp(); // all-time, rendered once
+
+  setPeriod("7d"); // triggers the first period-aware render
+  wirePeriodControls();
 }
 
-function renderTicker(loans, maxDate) {
+function wirePeriodControls() {
+  document.querySelectorAll(".period-btn[data-period]").forEach(btn => {
+    btn.addEventListener("click", () => setPeriod(btn.dataset.period));
+  });
+  document.getElementById("applyCustom").addEventListener("click", () => {
+    state.customStart = new Date(document.getElementById("customStart").value + "T00:00:00Z");
+    state.customEnd = new Date(document.getElementById("customEnd").value + "T00:00:00Z");
+    renderPeriodAware();
+  });
+}
+
+function setPeriod(period) {
+  state.period = period;
+  document.querySelectorAll(".period-btn[data-period]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.period === period);
+  });
+  document.getElementById("customDates").classList.toggle("visible", period === "custom");
+  if (period === "custom") {
+    state.customStart = new Date(document.getElementById("customStart").value + "T00:00:00Z");
+    state.customEnd = new Date(document.getElementById("customEnd").value + "T00:00:00Z");
+  }
+  renderPeriodAware();
+}
+
+function renderPeriodAware() {
+  const range = getPeriodRange();
+  document.getElementById("periodRangeLabel").textContent = periodLabel(range);
+  const filtered = filterByRange(state.allLoans, "_date", range);
+
+  const periodText = {
+    "1d": "Last Scrape Day", "7d": "Trailing 1 Week", "1m": "Trailing 1 Month",
+    "mtd": "Month to Date", "qtd": "Quarter to Date", "custom": "Selected Period",
+  }[state.period];
+  document.getElementById("volLabel").textContent = `Volume, ${periodText}`;
+  document.getElementById("rateLabel").textContent = `Median Rate, ${periodText}`;
+  document.getElementById("origLabel").textContent = `Active Originators, ${periodText}`;
+  document.getElementById("volumeChartNote").textContent =
+    `Notional volume by product, ${range.bucket === "weekly" ? "weekly" : "daily"} buckets, for the selected period.`;
+
+  renderPeriodStats(filtered);
+  renderOriginationsChart(filtered, range);
+  renderFundingTable(filtered);
+  renderRateDistribution(filtered);
+  renderConcentration(filtered);
+  renderFundingStructure(range);
+}
+
+// ---------------------------------------------------------------------
+// Renderers
+// ---------------------------------------------------------------------
+function renderTicker() {
   const byDay = {};
-  loans.forEach(l => {
-    if (l.amount_usd) byDay[l._day] = (byDay[l._day] || 0) + l.amount_usd;
+  state.allLoans.forEach(l => {
+    if (l.amount_usd) { const k = toDay(l._date); byDay[k] = (byDay[k] || 0) + l.amount_usd; }
   });
   const days = Object.keys(byDay).sort();
-  new Chart(document.getElementById("tickerChart"), {
+  destroyChart("tickerChart");
+  charts.tickerChart = new Chart(document.getElementById("tickerChart"), {
     type: "line",
     data: { labels: days, datasets: [{ data: days.map(d => byDay[d]), borderColor: GOLD, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.15 }] },
     options: {
@@ -437,43 +705,41 @@ function renderTicker(loans, maxDate) {
   });
 }
 
-function renderHeroStats(loans, maxDate) {
-  const cumulative = loans.reduce((s, l) => s + (l.amount_usd || 0), 0);
-  const last7 = loans.filter(l => daysAgo(l._day, maxDate) <= 7);
-  const vol7 = last7.reduce((s, l) => s + (l.amount_usd || 0), 0);
-  const rates7 = last7.filter(l => l.interest_rate_pct).map(l => l.interest_rate_pct);
-  const activeOriginators7 = new Set(last7.map(l => l.originator_address)).size;
-
-  const stats = document.querySelectorAll("#statsRow .stat");
-  const values = [fmtUsd(cumulative), fmtUsd(vol7), fmtRate(median(rates7)), activeOriginators7.toLocaleString()];
-  const goldIndex = 3;
-  stats.forEach((el, i) => {
-    el.querySelector(".value").textContent = values[i];
-    if (i === goldIndex) el.querySelector(".value").classList.add("gold");
-  });
+function renderAllTimeStat() {
+  const cumulative = state.allLoans.reduce((s, l) => s + (l.amount_usd || 0), 0);
+  document.querySelector("#statsRow .stat:nth-child(1) .value").textContent = fmtUsd(cumulative);
 }
 
-function renderOriginationsChart(loans, maxDate) {
-  const cutoff = new Date(maxDate.getTime() - 30 * 86400000);
-  const recent = loans.filter(l => l._date >= cutoff);
-  if (!recent.length) {
-    emptyState(document.getElementById("originationsChart").parentElement, "Not enough data yet for a 30-day view.");
-    return;
-  }
-  const days = [...new Set(recent.map(l => l._day))].sort();
-  const classes = [...new Set(recent.map(l => l.loan_class || "Unclassified"))];
+function renderPeriodStats(filtered) {
+  const vol = filtered.reduce((s, l) => s + (l.amount_usd || 0), 0);
+  const rates = filtered.filter(l => l.interest_rate_pct).map(l => l.interest_rate_pct);
+  const activeOriginators = new Set(filtered.map(l => l.originator_address)).size;
 
-  const datasets = classes.map(cls => ({
-    label: cls,
-    data: days.map(d => recent.filter(l => (l.loan_class || "Unclassified") === cls && l._day === d)
-      .reduce((s, l) => s + (l.amount_usd || 0), 0)),
-    backgroundColor: classColor(cls),
-    stack: "vol",
-  }));
+  const stats = document.querySelectorAll("#statsRow .stat");
+  stats[1].querySelector(".value").textContent = fmtUsd(vol);
+  stats[2].querySelector(".value").textContent = fmtRate(median(rates));
+  stats[3].querySelector(".value").textContent = activeOriginators.toLocaleString();
+  stats[3].querySelector(".value").classList.add("gold");
+}
 
-  new Chart(document.getElementById("originationsChart"), {
+function renderOriginationsChart(filtered, range) {
+  const el = document.getElementById("originationsChart");
+  destroyChart("originationsChart");
+  if (!filtered.length) { emptyState(el.parentElement, "No originations in the selected period."); return; }
+
+  const labels = buildBucketLabels(range);
+  const classes = [...new Set(filtered.map(l => l.loan_class || "Unclassified"))];
+
+  const datasets = classes.map(cls => {
+    const rows = filtered.filter(l => (l.loan_class || "Unclassified") === cls);
+    const byBucket = {};
+    rows.forEach(l => { const k = bucketKeyFor(l._date, range.bucket); byBucket[k] = (byBucket[k] || 0) + (l.amount_usd || 0); });
+    return { label: cls, data: labels.map(k => byBucket[k] || 0), backgroundColor: classColor(cls), stack: "vol" };
+  });
+
+  charts.originationsChart = new Chart(el, {
     type: "bar",
-    data: { labels: days, datasets },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y)}` } } },
@@ -485,14 +751,13 @@ function renderOriginationsChart(loans, maxDate) {
   });
 }
 
-function renderFundingTable(loans, maxDate) {
-  const cutoff = new Date(maxDate.getTime() - 30 * 86400000);
-  const recent = loans.filter(l => l._date >= cutoff);
-  const classes = [...new Set(recent.map(l => l.loan_class || "Unclassified"))];
+function renderFundingTable(filtered) {
+  const classes = [...new Set(filtered.map(l => l.loan_class || "Unclassified"))];
   const tbody = document.querySelector("#fundingTable tbody");
   tbody.innerHTML = "";
+  if (!classes.length) { emptyState(tbody.parentElement, "No originations in the selected period."); return; }
   classes.forEach(cls => {
-    const rows = recent.filter(l => (l.loan_class || "Unclassified") === cls);
+    const rows = filtered.filter(l => (l.loan_class || "Unclassified") === cls);
     const funded = rows.filter(l => l.amount_usd).length;
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${cls}</td><td>${rows.length.toLocaleString()}</td><td>${funded.toLocaleString()}</td><td>${fmtPct(funded / rows.length)}</td>`;
@@ -500,15 +765,15 @@ function renderFundingTable(loans, maxDate) {
   });
 }
 
-function renderRateDistribution(loans) {
+function renderRateDistribution(filtered) {
   const el = document.getElementById("rateDistribution");
-  const classes = [...new Set(loans.map(l => l.loan_class || "Unclassified"))];
-  const allRates = loans.filter(l => l.interest_rate_pct).map(l => l.interest_rate_pct);
-  if (!allRates.length) { emptyState(el, "No rate data available yet."); return; }
+  const classes = [...new Set(filtered.map(l => l.loan_class || "Unclassified"))];
+  const allRates = filtered.filter(l => l.interest_rate_pct).map(l => l.interest_rate_pct);
+  if (!allRates.length) { emptyState(el, "No rate data available for the selected period."); return; }
   const globalMin = Math.min(...allRates), globalMax = Math.max(...allRates);
   el.innerHTML = "";
   classes.forEach(cls => {
-    const rates = loans.filter(l => (l.loan_class || "Unclassified") === cls && l.interest_rate_pct).map(l => l.interest_rate_pct);
+    const rates = filtered.filter(l => (l.loan_class || "Unclassified") === cls && l.interest_rate_pct).map(l => l.interest_rate_pct);
     if (!rates.length) return;
     const min = Math.min(...rates), max = Math.max(...rates), med = median(rates);
     const range = globalMax - globalMin || 1;
@@ -528,91 +793,26 @@ function renderRateDistribution(loans) {
   });
 }
 
-function renderConcentration(rows) {
-  const el = document.getElementById("concentrationChart");
-  if (!rows.length) { emptyState(el.parentElement, "Concentration data accumulates as more months of history are collected."); return; }
-  new Chart(el, {
-    type: "line",
-    data: {
-      labels: rows.map(r => r.month),
-      datasets: [
-        { label: "Top-5 Share", data: rows.map(r => r.top5_share), borderColor: NAVY, backgroundColor: NAVY, yAxisID: "y", tension: 0.15, pointRadius: 3 },
-        { label: "Concentration Index (HHI)", data: rows.map(r => r.concentration_index_hhi), borderColor: GOLD, backgroundColor: GOLD, yAxisID: "y", tension: 0.15, pointRadius: 3, borderDash: [4, 3] },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtPct(c.parsed.y)}` } } },
-      scales: { y: { min: 0, max: 1, ticks: { callback: v => fmtPct(v, 0) }, grid: { color: "#EBEAE6" } }, x: { grid: { display: false } } },
-    },
-  });
-}
-
-function renderPartnerGrowth(rows) {
-  const el = document.getElementById("partnersChart");
-  if (!rows.length) { emptyState(el.parentElement, "Not enough history yet to show monthly onboarding."); return; }
-  new Chart(el, {
-    type: "bar",
-    data: { labels: rows.map(r => r.month), datasets: [{ data: rows.map(r => r.new_partner_count), backgroundColor: NAVY_LIGHT }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#EBEAE6" } } },
-    },
-  });
-}
-
-function renderRampCurves(rows) {
-  const el = document.getElementById("rampChart");
-  if (!rows.length) { emptyState(el.parentElement, "Ramp curves require originators with a full funding history — check back as more data accumulates."); return; }
-  const originators = [...new Set(rows.map(r => r.originator_address))];
-  const months = [...new Set(rows.map(r => r.months_since_first_loan))].sort((a, b) => a - b);
-  const palette = [NAVY, NAVY_LIGHT, GOLD, "#6E86A8", "#8B8478", "#A65D57", "#4C7A6E", "#8A6FA3", "#B08D57", "#3D5A80"];
-
-  const datasets = originators.map((addr, i) => {
-    const byMonth = {};
-    rows.filter(r => r.originator_address === addr).forEach(r => { byMonth[r.months_since_first_loan] = r.cumulative_funded_volume_usd; });
-    return {
-      label: shortAddr(addr),
-      data: months.map(m => byMonth[m] ?? null),
-      borderColor: palette[i % palette.length],
-      backgroundColor: palette[i % palette.length],
-      pointRadius: 0,
-      tension: 0.15,
-      spanGaps: true,
-    };
-  });
-
-  new Chart(el, {
-    type: "line",
-    data: { labels: months, datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y)}` } } },
-      scales: {
-        x: { title: { display: true, text: "Months since first loan", font: { size: 10 } }, grid: { display: false } },
-        y: { ticks: { callback: v => fmtUsd(v) }, grid: { color: "#EBEAE6" } },
-      },
-    },
-  });
-}
-
-function renderOriginatorsTable(loans, maxDate) {
-  const cutoff = new Date(maxDate.getTime() - 30 * 86400000);
-  const recent = loans.filter(l => l._date >= cutoff);
+function renderConcentration(filtered) {
   const byOrig = {};
-  recent.forEach(l => {
+  filtered.forEach(l => {
     const o = byOrig[l.originator_address] || (byOrig[l.originator_address] = { count: 0, volume: 0, rates: [] });
     o.count += 1;
     if (l.amount_usd) o.volume += l.amount_usd;
     if (l.interest_rate_pct) o.rates.push(l.interest_rate_pct);
   });
   const totalVolume = Object.values(byOrig).reduce((s, o) => s + o.volume, 0);
-  const ranked = Object.entries(byOrig).sort((a, b) => b[1].volume - a[1].volume).slice(0, 25);
+  const ranked = Object.entries(byOrig).sort((a, b) => b[1].volume - a[1].volume);
+
+  const shares = ranked.map(([, o]) => (totalVolume ? o.volume / totalVolume : 0));
+  const top5Share = shares.slice(0, 5).reduce((s, v) => s + v, 0);
+  const hhi = shares.reduce((s, v) => s + v * v, 0);
+  document.getElementById("top5ShareValue").textContent = fmtPct(top5Share);
+  document.getElementById("hhiValue").textContent = totalVolume ? hhi.toFixed(3) : "—";
 
   const tbody = document.querySelector("#originatorsTable tbody");
   tbody.innerHTML = "";
-  if (!ranked.length) { emptyState(tbody.parentElement, "No originator activity in the trailing 30 days yet."); return; }
+  if (!ranked.length) { emptyState(tbody.parentElement, "No originator activity in the selected period."); return; }
   ranked.forEach(([addr, o]) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -625,24 +825,86 @@ function renderOriginatorsTable(loans, maxDate) {
   });
 }
 
-function renderFundingStructure(rows) {
+function renderFundingStructure(range) {
   const el = document.getElementById("fundingChart");
-  const valid = rows.filter(r => r.snapshot_date);
-  if (!valid.length) { emptyState(el.parentElement, "Funding-structure snapshots accumulate one per day."); return; }
-  valid.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
-  new Chart(el, {
+  destroyChart("fundingChart");
+  const rows = filterByRange(state.fundingRows, "_date", range);
+  if (!rows.length) { emptyState(el.parentElement, "No funding-structure snapshots in the selected period."); return; }
+
+  const labels = buildBucketLabels(range);
+  const secByBucket = {}, wholeByBucket = {};
+  rows.forEach(r => {
+    const k = bucketKeyFor(r._date, range.bucket);
+    secByBucket[k] = (secByBucket[k] || 0) + (r.securitized_usd || 0);
+    wholeByBucket[k] = (wholeByBucket[k] || 0) + (r.whole_loan_usd || 0);
+  });
+
+  charts.fundingChart = new Chart(el, {
     type: "bar",
     data: {
-      labels: valid.map(r => r.snapshot_date),
+      labels,
       datasets: [
-        { label: "Securitized", data: valid.map(r => r.securitized_usd), backgroundColor: NAVY, stack: "f" },
-        { label: "Whole Loan / Other", data: valid.map(r => r.whole_loan_usd), backgroundColor: GOLD, stack: "f" },
+        { label: "Securitized", data: labels.map(k => secByBucket[k] || 0), backgroundColor: NAVY, stack: "f" },
+        { label: "Whole Loan / Other", data: labels.map(k => wholeByBucket[k] || 0), backgroundColor: GOLD, stack: "f" },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y, false)}` } } },
       scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: v => fmtUsd(v) }, grid: { color: "#EBEAE6" } } },
+    },
+  });
+}
+
+// ---------- All-time sections (not period-aware) ----------
+async function renderPartnerGrowthAndRamp() {
+  const [newPartners, ramp] = await Promise.all([
+    fetchCsv("new_partners_monthly.csv"),
+    fetchCsv("originator_ramp_curves.csv"),
+  ]);
+
+  const pEl = document.getElementById("partnersChart");
+  if (!newPartners.length) {
+    emptyState(pEl.parentElement, "Not enough history yet to show monthly onboarding.");
+  } else {
+    charts.partnersChart = new Chart(pEl, {
+      type: "bar",
+      data: { labels: newPartners.map(r => r.month), datasets: [{ data: newPartners.map(r => r.new_partner_count), backgroundColor: NAVY_LIGHT }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#EBEAE6" } } },
+      },
+    });
+  }
+
+  const rEl = document.getElementById("rampChart");
+  if (!ramp.length) {
+    emptyState(rEl.parentElement, "Ramp curves require originators with a full funding history — check back as more data accumulates.");
+    return;
+  }
+  const originators = [...new Set(ramp.map(r => r.originator_address))];
+  const months = [...new Set(ramp.map(r => r.months_since_first_loan))].sort((a, b) => a - b);
+  const palette = [NAVY, NAVY_LIGHT, GOLD, "#6E86A8", "#8B8478", "#A65D57", "#4C7A6E", "#8A6FA3", "#B08D57", "#3D5A80"];
+  const datasets = originators.map((addr, i) => {
+    const byMonth = {};
+    ramp.filter(r => r.originator_address === addr).forEach(r => { byMonth[r.months_since_first_loan] = r.cumulative_funded_volume_usd; });
+    return {
+      label: shortAddr(addr), data: months.map(m => byMonth[m] ?? null),
+      borderColor: palette[i % palette.length], backgroundColor: palette[i % palette.length],
+      pointRadius: 0, tension: 0.15, spanGaps: true,
+    };
+  });
+  charts.rampChart = new Chart(rEl, {
+    type: "line",
+    data: { labels: months, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtUsd(c.parsed.y)}` } } },
+      scales: {
+        x: { title: { display: true, text: "Months since first loan", font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { callback: v => fmtUsd(v) }, grid: { color: "#EBEAE6" } },
+      },
     },
   });
 }
