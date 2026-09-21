@@ -24,6 +24,20 @@ logger = logging.getLogger("refresh_volumes")
 
 _COMMIT_EVERY = 25  # flush progress periodically so a mid-phase crash/timeout/kill only loses this many items' work, not the whole run
 
+# The NAV price's "usd" denom is NOT a registered Provenance bank-module
+# token (confirmed: /cosmos/bank/v1beta1/denoms_metadata/usd 404s) -- it's
+# an informal convention used by Figure's own origination service, and the
+# raw integer amount is expressed in USD MILLS (thousandths of a dollar),
+# not whole dollars. Verified against live chain data: a scope showing
+# amount_usd=1,763,750,000 with no scaling corresponds to a raw NAV of
+# {"denom":"usd","amount":"1763750000"} fetched directly from
+# api.provenance.io -- dividing by 1,000 turns that into $1,763,750 and
+# turns the broader dataset's per-loan averages ($44K-$87K) into plausible
+# HELOC draw sizes, versus the unscaled figures (tens of millions per loan)
+# that were wildly inconsistent with Figure's own published weekly volume
+# (~$300-450M/week across ~1,200 loans/day).
+_NAV_SCALE = 1_000
+
 
 def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS,
                             limit: int = 500) -> int:
@@ -67,7 +81,7 @@ def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS,
                 db.mark_volume_checked(conn, scope_addr, now_iso)
                 continue
 
-            amount_usd = float(price.get("amount", 0))
+            amount_usd = float(price.get("amount", 0)) / _NAV_SCALE
             db.set_loan_amount(
                 conn, scope_addr,
                 amount_usd=amount_usd,

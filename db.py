@@ -130,10 +130,34 @@ def _run_migrations(conn):
                 raise
 
 
+_NAV_SCALE_FIX_KEY = "amount_usd_rescaled_v1"
+
+
+def _fix_legacy_amount_scale(conn):
+    """
+    One-time, idempotent correction: refresh_volumes.py originally stored
+    NAV price amounts as-is, without dividing by 1,000 (the NAV price's
+    "usd" denom is Figure's own convention, expressed in USD mills, not
+    whole dollars -- confirmed against live chain data). Every amount_usd
+    value written before that fix was ~1,000x too large. This runs once
+    (guarded by a scrape_state flag) to rescale whatever's already in the
+    DB, so a re-fetch from the API isn't needed -- the correction is a
+    pure division.
+    """
+    if get_state(conn, _NAV_SCALE_FIX_KEY):
+        return
+    cur = conn.execute(
+        "UPDATE loans SET amount_usd = amount_usd / 1000.0 WHERE amount_usd IS NOT NULL"
+    )
+    logger.info("One-time NAV scale correction: rescaled %d loans' amount_usd (/1000)", cur.rowcount)
+    set_state(conn, _NAV_SCALE_FIX_KEY, "done")
+
+
 def init_db():
     with connect() as conn:
         conn.executescript(SCHEMA)
         _run_migrations(conn)
+        _fix_legacy_amount_scale(conn)
 
 
 # --- loans -------------------------------------------------------------
