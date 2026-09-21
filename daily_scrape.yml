@@ -1,39 +1,21 @@
 name: Daily Figure origination scrape
 
-# GitHub Actions cron only runs on fixed UTC times -- it has no concept
-# of "midnight Eastern" directly, and ET shifts between EST (UTC-5) and
-# EDT (UTC-4) twice a year. So we schedule both possible UTC times and
-# use a guard job to only actually run the one that currently matches
-# true midnight in America/New_York. This self-corrects across DST
-# changes with no manual edits needed.
+# Runs once a day. GitHub's scheduled triggers aren't guaranteed to fire
+# at an exact minute (they can slip by anywhere from a few minutes to
+# well over an hour under load), so this just picks a fixed UTC time
+# comfortably in the US overnight window rather than trying to hit
+# midnight Eastern precisely -- daily cadence is what matters, not the
+# exact timestamp.
 on:
   schedule:
-    - cron: "0 5 * * *"   # 00:00 EST (UTC-5) -- roughly early Nov to mid Mar
-    - cron: "0 4 * * *"   # 00:00 EDT (UTC-4) -- roughly mid Mar to early Nov
-  workflow_dispatch: {}    # manual runs from the Actions tab always run, regardless of time
+    - cron: "0 6 * * *"   # ~1-2am US Eastern, depending on DST
+  workflow_dispatch: {}    # manual runs from the Actions tab always run
 
 permissions:
   contents: write
 
 jobs:
-  check-time:
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - id: check
-        run: |
-          HOUR_ET=$(TZ="America/New_York" date +%H)
-          echo "Current hour in America/New_York: $HOUR_ET"
-          if [ "$HOUR_ET" = "00" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          fi
-
   scrape:
-    needs: check-time
-    if: needs.check-time.outputs.should_run == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -53,14 +35,6 @@ jobs:
         run: python run_daily.py
 
       - name: Commit updated data + exports
-        # Always attempt this, even if the scrape step above reported a
-        # failure -- run_daily.py runs each phase (discovery, enrichment,
-        # rate/volume refresh, export) independently and commits progress
-        # to SQLite incrementally, so a failure in one phase (e.g. a
-        # transient timeout) still leaves real, worth-keeping progress
-        # from the others. The job as a whole still shows as failed above
-        # if run_daily.py exited non-zero, so failures stay visible.
-        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
