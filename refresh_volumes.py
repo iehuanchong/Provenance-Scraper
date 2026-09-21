@@ -22,6 +22,8 @@ import provenance_client as pc
 
 logger = logging.getLogger("refresh_volumes")
 
+_COMMIT_EVERY = 25  # flush progress periodically so a mid-phase crash/timeout/kill only loses this many items' work, not the whole run
+
 
 def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS,
                             limit: int = 500) -> int:
@@ -43,9 +45,14 @@ def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS,
                     len(pending), window_days, limit)
 
         now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
-        for row in pending:
+        for i, row in enumerate(pending, start=1):
             scope_addr = row["scope_addr"]
-            navs = pc.get_net_asset_values(scope_addr)
+            try:
+                navs = pc.get_net_asset_values(scope_addr)
+            except RuntimeError:
+                logger.warning("Failed to fetch NAV for %s after retries, will retry next run", scope_addr)
+                continue
+
             if not navs:
                 db.mark_volume_checked(conn, scope_addr, now_iso)
                 continue
@@ -68,6 +75,11 @@ def refresh_recent_volumes(window_days: int = config.NAV_REFRESH_WINDOW_DAYS,
                 checked_at=now_iso,
             )
             updated += 1
+
+            if i % _COMMIT_EVERY == 0:
+                conn.commit()
+                logger.info("Volume refresh progress: %d/%d checked, %d newly priced (committed)",
+                            i, len(pending), updated)
 
     logger.info("Volume refresh complete: %d loans newly priced", updated)
     return updated

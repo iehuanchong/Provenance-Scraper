@@ -1,0 +1,82 @@
+name: Daily Figure origination scrape
+
+# Runs once a day. GitHub's scheduled triggers aren't guaranteed to fire
+# at an exact minute (they can slip by anywhere from a few minutes to
+# well over an hour under load), so this just picks a fixed UTC time
+# comfortably in the US overnight window rather than trying to hit
+# midnight Eastern precisely -- daily cadence is what matters, not the
+# exact timestamp.
+on:
+  schedule:
+    - cron: "0 6 * * *"   # ~1-2am US Eastern, depending on DST
+  workflow_dispatch:       # manual runs from the Actions tab always run
+    inputs:
+      backfill_from:
+        description: "Backfill start date (YYYY-MM-DD). Leave blank for a normal single-day (yesterday) run."
+        required: false
+        type: string
+      backfill_to:
+        description: "Backfill end date (YYYY-MM-DD). Leave blank for a normal single-day (yesterday) run."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    # No custom timeout -- a backlog catch-up run is allowed to take as
+    # long as it takes. Each phase in run_daily.py now commits its
+    # progress to SQLite every 25 items (not just once at the end), so
+    # even if this hits GitHub's own hard 6-hour job limit and gets
+    # killed mid-phase, at most the last ~25 items' work is lost, not
+    # the whole run.
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily scrape
+        # discover_originations() upserts on scope_addr with ON CONFLICT
+        # DO NOTHING, so re-scraping a range that's already partly
+        # covered is safe -- it only fills in the gaps, it never
+        # duplicates or disturbs enrichment/rate/volume data already
+        # captured for a loan.
+        run: |
+          if [ -n "${{ inputs.backfill_from }}" ] && [ -n "${{ inputs.backfill_to }}" ]; then
+            echo "Backfilling ${{ inputs.backfill_from }} .. ${{ inputs.backfill_to }}"
+            python run_daily.py --backfill "${{ inputs.backfill_from }}" "${{ inputs.backfill_to }}"
+          else
+            python run_daily.py
+          fi
+
+      - name: Commit updated data + exports
+        # Always attempt this, even if the scrape step above reported a
+        # failure or was cut off by the timeout -- run_daily.py runs each
+        # phase (discovery, enrichment, rate/volume refresh, export)
+        # independently and commits progress to SQLite incrementally, so
+        # a failure or timeout partway through still leaves real,
+        # worth-keeping progress from the phases that finished. The job
+        # as a whole still shows as failed above if run_daily.py exited
+        # non-zero or the job timed out, so failures stay visible.
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/originations.db exports/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Daily scrape: $(TZ='America/New_York' date +'%Y-%m-%d') ET"
+            git push
+          fi

@@ -423,6 +423,17 @@ const REPO = "iehuanchong/Provenance-Scraper";
 const BRANCH = "main";
 const DATA_BASE = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/exports/`;
 
+// Set to "YYYY-MM-DD" to exclude everything originated before this date
+// from every chart, table and stat on the page (loans are bucketed by
+// their real on-chain origination date -- block_time -- not by when the
+// scraper happened to run, so a backfill spreads historical loans across
+// their true dates rather than dumping them all onto one day; this knob
+// is only for deliberately hiding a known-ragged early window, e.g. if
+// coverage before a certain date is known to have gaps you don't want
+// silently read as "zero origination days"). Leave null once the
+// historical backfill has closed the gaps in existing coverage.
+const DATA_FLOOR_DATE = null;
+
 const NAVY = "#003579";
 const NAVY_LIGHT = "#2C5A9E";
 const GOLD = "#A9814A";
@@ -492,7 +503,7 @@ function startOfIsoWeek(date) {
 
 async function fetchCsv(name) {
   try {
-    const res = await fetch(DATA_BASE + name, { cache: "no-store" });
+    const res = await fetch(`${DATA_BASE}${name}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) return [];
     const text = await res.text();
     const parsed = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
@@ -600,7 +611,11 @@ async function main() {
     fetchCsv("funding_channels.csv"),
   ]);
 
-  const validLoans = loans.filter(l => l && l.scope_addr && l.block_time);
+  let validLoans = loans.filter(l => l && l.scope_addr && l.block_time);
+  if (DATA_FLOOR_DATE) {
+    const floorMs = new Date(DATA_FLOOR_DATE + "T00:00:00Z").getTime();
+    validLoans = validLoans.filter(l => new Date(l.block_time).getTime() >= floorMs);
+  }
   if (!validLoans.length) {
     document.getElementById("lastUpdated").textContent = "No data yet";
     emptyState(document.getElementById("heroSection"),

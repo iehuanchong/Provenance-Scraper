@@ -53,6 +53,8 @@ import provenance_client as pc
 
 logger = logging.getLogger("enrich_loan_classes")
 
+_COMMIT_EVERY = 25  # flush progress periodically so a mid-phase crash/timeout/kill only loses this many items' work, not the whole run
+
 # Exact contract-name matches take priority -- these are the only two
 # names actually observed in production as of this writing (see module
 # docstring for the evidence and its limits).
@@ -135,7 +137,7 @@ def enrich_pending(limit: int = 500) -> int:
             (limit,),
         ).fetchall()
 
-        for row in rows:
+        for i, row in enumerate(rows, start=1):
             scope_addr = row["scope_addr"]
             try:
                 detail = pc.get_scope_detail(
@@ -157,6 +159,11 @@ def enrich_pending(limit: int = 500) -> int:
                 (contract_name, loan_class, scope_addr),
             )
             enriched += 1
+
+            if i % _COMMIT_EVERY == 0:
+                conn.commit()
+                logger.info("Enrichment progress: %d/%d checked, %d enriched (committed)",
+                            i, len(rows), enriched)
 
     logger.info("Enriched %d loans with class labels", enriched)
     return enriched

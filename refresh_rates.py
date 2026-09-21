@@ -26,6 +26,9 @@ logger = logging.getLogger("refresh_rates")
 _RATE_SCALE = 1_000_000  # raw interest_rate / _RATE_SCALE = percent
 
 
+_COMMIT_EVERY = 25  # flush progress periodically so a mid-phase crash/timeout/kill only loses this many items' work, not the whole run
+
+
 def refresh_pending_rates(limit: int = 1000) -> int:
     """
     Fetches ledger data for up to `limit` loans that don't have rate info
@@ -38,7 +41,7 @@ def refresh_pending_rates(limit: int = 1000) -> int:
         pending = db.get_scopes_missing_rate(conn, limit=limit)
         logger.info("Checking ledger/rate data for %d loans", len(pending))
 
-        for row in pending:
+        for i, row in enumerate(pending, start=1):
             scope_addr = row["scope_addr"]
             try:
                 ledger = pc.get_ledger(scope_addr)
@@ -75,6 +78,11 @@ def refresh_pending_rates(limit: int = 1000) -> int:
                 checked_at=now_iso,
             )
             updated += 1
+
+            if i % _COMMIT_EVERY == 0:
+                conn.commit()
+                logger.info("Rate refresh progress: %d/%d checked, %d updated (committed)",
+                            i, len(pending), updated)
 
     logger.info("Rate refresh complete: %d loans updated", updated)
     return updated
