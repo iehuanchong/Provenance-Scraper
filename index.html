@@ -503,7 +503,13 @@ function startOfIsoWeek(date) {
 
 async function fetchCsv(name) {
   try {
-    const res = await fetch(`${DATA_BASE}${name}?t=${Date.now()}`, { cache: "no-store" });
+    // Bucketed to 5-minute windows rather than Date.now() on every load --
+    // still busts staleness (data only changes once a day), but repeated
+    // reloads within the same window reuse raw.githubusercontent.com's
+    // normal CDN cache instead of forcing a unique origin fetch every
+    // single time, which was tripping GitHub's abuse-rate-limiting (403s)
+    // under repeated refreshes.
+    const res = await fetch(`${DATA_BASE}${name}?t=${Math.floor(Date.now() / 300000)}`, { cache: "no-store" });
     if (!res.ok) return [];
     const text = await res.text();
     const parsed = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });

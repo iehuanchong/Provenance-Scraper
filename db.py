@@ -187,11 +187,21 @@ def scope_exists(conn, scope_addr: str) -> bool:
 
 
 def get_unfunded_recent_scopes(conn, since_iso: str, limit: int = 500):
-    """Loans discovered since `since_iso` that don't have a dollar amount yet."""
+    """Loans discovered since `since_iso` that don't have a dollar amount yet.
+    Oldest block_time first -- without an explicit order, SQLite returns
+    rows in whatever physical order they happen to sit in, which after a
+    big backfill means a capped-limit run can end up checking an
+    essentially arbitrary subset of dates instead of working through the
+    backlog in a predictable oldest-to-newest order. Oldest-first also
+    means the loans most likely to have already funded (longest since
+    origination) get checked first, so the backlog closes out sooner
+    rather than being spent on loans that are still too new to have
+    funded yet regardless of check order."""
     return conn.execute(
         """
         SELECT scope_addr FROM loans
         WHERE amount_usd IS NULL AND block_time >= ?
+        ORDER BY block_time ASC
         LIMIT ?
         """,
         (since_iso, limit),
@@ -201,11 +211,15 @@ def get_unfunded_recent_scopes(conn, since_iso: str, limit: int = 500):
 def get_scopes_missing_rate(conn, limit: int = 1000):
     """Loans that don't have ledger/rate info yet. Unlike NAV, the ledger
     is created in the same tx as the loan, so there's no meaningful
-    'recent window' filter needed -- any loan missing it is fair game."""
+    'recent window' filter needed -- any loan missing it is fair game.
+    Still ordered oldest-first for the same reason as
+    get_unfunded_recent_scopes: predictable backlog draindown after a
+    backfill, rather than an arbitrary subset each run."""
     return conn.execute(
         """
         SELECT scope_addr FROM loans
         WHERE interest_rate_pct IS NULL
+        ORDER BY block_time ASC
         LIMIT ?
         """,
         (limit,),
